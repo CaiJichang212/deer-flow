@@ -38,6 +38,7 @@ sleep 1
 pkill -9 nginx 2>/dev/null || true
 killall -9 nginx 2>/dev/null || true
 ./scripts/cleanup-containers.sh deer-flow-sandbox 2>/dev/null || true
+rm -rf logs/nginx-client-body logs/nginx-proxy logs/nginx-fastcgi logs/nginx-scgi logs/nginx-uwsgi 2>/dev/null || true
 sleep 1
 
 # ── Banner ────────────────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ cleanup() {
     killall -9 nginx 2>/dev/null || true
     echo "Cleaning up sandbox containers..."
     ./scripts/cleanup-containers.sh deer-flow-sandbox 2>/dev/null || true
+    rm -rf logs/nginx-client-body logs/nginx-proxy logs/nginx-fastcgi logs/nginx-scgi logs/nginx-uwsgi 2>/dev/null || true
     echo "✓ All services stopped"
     exit 0
 }
@@ -155,6 +157,8 @@ echo "Starting Frontend..."
     cleanup
 }
 echo "✓ Frontend started on localhost:3000"
+
+mkdir -p logs/nginx-client-body logs/nginx-proxy logs/nginx-fastcgi logs/nginx-scgi logs/nginx-uwsgi
 
 echo "Starting Nginx reverse proxy..."
 nginx -g 'daemon off;' -c "$REPO_ROOT/docker/nginx/nginx.local.conf" -p "$REPO_ROOT" > logs/nginx.log 2>&1 &
