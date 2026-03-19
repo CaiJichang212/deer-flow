@@ -1,3 +1,4 @@
+/frontend/scripts/public/demo/threads
 # DeerFlow docker image cache
 docker/.cache/
 # OS generated files
