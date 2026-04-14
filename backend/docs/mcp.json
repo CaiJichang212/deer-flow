@@ -1,0 +1,21 @@
+{
+  "mcp_settings": {
+    "servers": {
+      "mysql": {
+        "transport": "streamable_http",
+        "url": "http://localhost:31002/mcp/",
+        "enabled_tools": [
+          "is_in_shanghai",
+          "check_utalk_identity",
+          "check_nickname_pattern",
+          "check_friend_pattern",
+          "check_age_anomaly",
+          "check_night_owl",
+          "check_hotel_stays",
+          "check_gender_anomaly",
+          "analyze_role"
+        ]
+      }
+    }
+  }
+}

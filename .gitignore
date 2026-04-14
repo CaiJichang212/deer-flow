@@ -1,3 +1,5 @@
+.trae
+logs*
 /frontend/scripts/public/demo/threads
 # DeerFlow docker image cache
 docker/.cache/
