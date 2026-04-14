@@ -1,6 +1,8 @@
 /frontend/scripts/public/demo/threads
 # DeerFlow docker image cache
 docker/.cache/
+# oh-my-claudecode state
+.omc/
 # OS generated files
 .DS_Store
 *.local
@@ -53,3 +55,6 @@ web/
 # Deployment artifacts
 backend/Dockerfile.langgraph
 config.yaml.bak
+.playwright-mcp
+.gstack/
+.worktrees
