@@ -52,6 +52,10 @@ export function groupMessages<T>(
   }
 
   for (const message of messages) {
+    if (isHiddenFromUIMessage(message)) {
+      continue;
+    }
+
     if (message.name === "todo_reminder") {
       continue;
     }
@@ -127,7 +131,10 @@ export function groupMessages<T>(
 
 export function extractTextFromMessage(message: Message) {
   if (typeof message.content === "string") {
-    return message.content.trim();
+    return (
+      splitInlineReasoningFromAIMessage(message)?.content ??
+      message.content.trim()
+    );
   }
   if (Array.isArray(message.content)) {
     return message.content
@@ -138,9 +145,39 @@ export function extractTextFromMessage(message: Message) {
   return "";
 }
 
+const THINK_TAG_RE = /<think>\s*([\s\S]*?)\s*<\/think>/g;
+
+function splitInlineReasoning(content: string) {
+  const reasoningParts: string[] = [];
+  const cleaned = content
+    .replace(THINK_TAG_RE, (_, reasoning: string) => {
+      const normalized = reasoning.trim();
+      if (normalized) {
+        reasoningParts.push(normalized);
+      }
+      return "";
+    })
+    .trim();
+
+  return {
+    content: cleaned,
+    reasoning: reasoningParts.length > 0 ? reasoningParts.join("\n\n") : null,
+  };
+}
+
+function splitInlineReasoningFromAIMessage(message: Message) {
+  if (message.type !== "ai" || typeof message.content !== "string") {
+    return null;
+  }
+  return splitInlineReasoning(message.content);
+}
+
 export function extractContentFromMessage(message: Message) {
   if (typeof message.content === "string") {
-    return message.content.trim();
+    return (
+      splitInlineReasoningFromAIMessage(message)?.content ??
+      message.content.trim()
+    );
   }
   if (Array.isArray(message.content)) {
     return message.content
@@ -177,6 +214,9 @@ export function extractReasoningContentFromMessage(message: Message) {
       return part.thinking as string;
     }
   }
+  if (typeof message.content === "string") {
+    return splitInlineReasoning(message.content).reasoning;
+  }
   return null;
 }
 
@@ -202,7 +242,12 @@ export function extractURLFromImageURLContent(
 
 export function hasContent(message: Message) {
   if (typeof message.content === "string") {
-    return message.content.trim().length > 0;
+    return (
+      (
+        splitInlineReasoningFromAIMessage(message)?.content ??
+        message.content.trim()
+      ).length > 0
+    );
   }
   if (Array.isArray(message.content)) {
     return message.content.length > 0;
@@ -221,6 +266,9 @@ export function hasReasoning(message: Message) {
     const part = message.content[0];
     // Compatible with the Anthropic gateway
     return (part as unknown as { type: "thinking" })?.type === "thinking";
+  }
+  if (typeof message.content === "string") {
+    return splitInlineReasoning(message.content).reasoning !== null;
   }
   return false;
 }
@@ -277,6 +325,10 @@ export function findToolCallResult(toolCallId: string, messages: Message[]) {
     }
   }
   return undefined;
+}
+
+export function isHiddenFromUIMessage(message: Message) {
+  return message.additional_kwargs?.hide_from_ui === true;
 }
 
 /**
