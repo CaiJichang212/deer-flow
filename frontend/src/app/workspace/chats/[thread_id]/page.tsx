@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
@@ -24,7 +25,11 @@ import { Welcome } from "@/components/workspace/welcome";
 import { useI18n } from "@/core/i18n/hooks";
 import { useNotification } from "@/core/notification/hooks";
 import { useThreadSettings } from "@/core/settings";
+import { getAPIClient } from "@/core/api";
+import { getBackendBaseURL } from "@/core/config";
 import { useThreadStream } from "@/core/threads/hooks";
+import type { PlanReviewState } from "@/core/threads";
+import type { PlanReviewTodo } from "@/core/threads";
 import { textOfMessage } from "@/core/threads/utils";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -36,6 +41,11 @@ export default function ChatPage() {
     useThreadChat();
   const [settings, setSettings] = useThreadSettings(threadId);
   const [mounted, setMounted] = useState(false);
+  const [planReviewOverride, setPlanReviewOverride] =
+    useState<PlanReviewState | null>(null);
+  const [todosOverride, setTodosOverride] = useState<PlanReviewTodo[] | null>(
+    null,
+  );
   useSpecificChatMode();
 
   useEffect(() => {
@@ -72,6 +82,44 @@ export default function ChatPage() {
     },
   });
 
+  useEffect(() => {
+    const remotePlanReview = thread.values.plan_review;
+    if (
+      planReviewOverride &&
+      remotePlanReview &&
+      remotePlanReview.version >= planReviewOverride.version
+    ) {
+      setPlanReviewOverride(null);
+    }
+  }, [planReviewOverride, thread.values.plan_review]);
+
+  useEffect(() => {
+    if (!todosOverride) {
+      return;
+    }
+    const remoteTodos = thread.values.todos ?? [];
+    if (JSON.stringify(remoteTodos) === JSON.stringify(todosOverride)) {
+      setTodosOverride(null);
+    }
+  }, [todosOverride, thread.values.todos]);
+
+  const effectivePlanReview = planReviewOverride ?? thread.values.plan_review;
+  const effectiveTodos = useMemo(() => {
+    const source = todosOverride ?? (thread.values.todos ?? []);
+    return source.map((todo) => {
+      const status = todo.status;
+      if (
+        status === "pending" ||
+        status === "in_progress" ||
+        status === "completed" ||
+        status === undefined
+      ) {
+        return { ...todo, status };
+      }
+      return { ...todo, status: "pending" as const };
+    });
+  }, [todosOverride, thread.values.todos]);
+
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
       void sendMessage(threadId, message);
@@ -81,6 +129,81 @@ export default function ChatPage() {
   const handleStop = useCallback(async () => {
     await thread.stop();
   }, [thread]);
+
+  const handlePlanAction = useCallback(
+    (action: "confirm" | "retry", planVersion: number) => {
+      setPlanReviewOverride(null);
+      void sendMessage(
+        threadId,
+        { text: "", files: [] },
+        undefined,
+        {
+          additionalKwargs: {
+            hide_from_ui: true,
+            plan_action: action,
+            plan_version: planVersion,
+          },
+        },
+      );
+    },
+    [sendMessage, threadId],
+  );
+
+  const handlePlanSave = useCallback(
+    async (todos: PlanReviewTodo[], planVersion: number) => {
+      const planReview = planReviewOverride ?? thread.values.plan_review;
+      if (!planReview) {
+        toast.error("保存计划失败");
+        return false;
+      }
+      const nextPlanReview = {
+        ...planReview,
+        todos,
+        status: "pending_review" as const,
+        version: Math.max(planVersion + 1, (planReview.version ?? 0) + 1),
+        updated_at: Math.floor(Date.now() / 1000),
+      };
+      try {
+        const response = await fetch(
+          `${getBackendBaseURL()}/api/threads/${encodeURIComponent(threadId)}/state`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              values: {
+                plan_review: nextPlanReview,
+                todos,
+              },
+            }),
+          },
+        );
+        if (!response.ok) {
+          throw new Error("request_failed");
+        }
+        setPlanReviewOverride(nextPlanReview);
+        setTodosOverride(todos);
+        return true;
+      } catch {
+        try {
+          await getAPIClient(isMock).threads.updateState(threadId, {
+            values: {
+              plan_review: nextPlanReview,
+              todos,
+            },
+          });
+          setPlanReviewOverride(nextPlanReview);
+          setTodosOverride(todos);
+          return true;
+        } catch {
+          toast.error("保存计划失败");
+          return false;
+        }
+      }
+    },
+    [isMock, planReviewOverride, thread.values.plan_review, threadId],
+  );
 
   const messageListPaddingBottom = showFollowups
     ? MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
@@ -115,6 +238,9 @@ export default function ChatPage() {
                 threadId={threadId}
                 thread={thread}
                 paddingBottom={messageListPaddingBottom}
+                onPlanAction={handlePlanAction}
+                onPlanSave={handlePlanSave}
+                planReviewOverride={effectivePlanReview}
               />
             </div>
             <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-4">
@@ -131,10 +257,8 @@ export default function ChatPage() {
                   <div className="absolute right-0 bottom-0 left-0">
                     <TodoList
                       className="bg-background/5"
-                      todos={thread.values.todos ?? []}
-                      hidden={
-                        !thread.values.todos || thread.values.todos.length === 0
-                      }
+                      todos={effectiveTodos}
+                      hidden={effectiveTodos.length === 0}
                     />
                   </div>
                 </div>

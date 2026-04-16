@@ -2,11 +2,25 @@ import type { Message, Thread } from "@langchain/langgraph-sdk";
 
 import type { Todo } from "../todos";
 
+export interface PlanReviewTodo {
+  content: string;
+  status?: string;
+}
+
+export interface PlanReviewState {
+  status: "pending_review" | "approved" | "executing" | "completed";
+  version: number;
+  todos: PlanReviewTodo[];
+  updated_at: number;
+  title?: string;
+}
+
 export interface AgentThreadState extends Record<string, unknown> {
   title: string;
   messages: Message[];
   artifacts: string[];
   todos?: Todo[];
+  plan_review?: PlanReviewState;
 }
 
 export interface AgentThreadContext extends Record<string, unknown> {

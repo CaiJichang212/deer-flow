@@ -16,6 +16,8 @@ interface AssistantPresentFilesGroup extends GenericMessageGroup<"assistant:pres
 
 interface AssistantClarificationGroup extends GenericMessageGroup<"assistant:clarification"> {}
 
+interface AssistantPlanReviewGroup extends GenericMessageGroup<"assistant:plan-review"> {}
+
 interface AssistantSubagentGroup extends GenericMessageGroup<"assistant:subagent"> {}
 
 type MessageGroup =
@@ -24,6 +26,7 @@ type MessageGroup =
   | AssistantMessageGroup
   | AssistantPresentFilesGroup
   | AssistantClarificationGroup
+  | AssistantPlanReviewGroup
   | AssistantSubagentGroup;
 
 export function groupMessages<T>(
@@ -44,7 +47,8 @@ export function groupMessages<T>(
       last &&
       last.type !== "human" &&
       last.type !== "assistant" &&
-      last.type !== "assistant:clarification"
+      last.type !== "assistant:clarification" &&
+      last.type !== "assistant:plan-review"
     ) {
       return last;
     }
@@ -73,6 +77,13 @@ export function groupMessages<T>(
         groups.push({
           id: message.id,
           type: "assistant:clarification",
+          messages: [message],
+        });
+      } else if (isPlanReviewToolMessage(message)) {
+        lastOpenGroup()?.messages.push(message);
+        groups.push({
+          id: message.id,
+          type: "assistant:plan-review",
           messages: [message],
         });
       } else {
@@ -288,6 +299,10 @@ export function hasPresentFiles(message: Message) {
 
 export function isClarificationToolMessage(message: Message) {
   return message.type === "tool" && message.name === "ask_clarification";
+}
+
+export function isPlanReviewToolMessage(message: Message) {
+  return message.type === "tool" && message.name === "review_plan";
 }
 
 export function extractPresentFilesFromMessage(message: Message) {

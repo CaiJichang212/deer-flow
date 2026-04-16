@@ -277,7 +277,20 @@ export const enUS: Translations = {
     writeFile: "Write file",
     clickToViewContent: "Click to view file content",
     writeTodos: "Update to-do list",
+    reviewPlan: "Submit plan for review",
     skillInstallTooltip: "Install skill and make it available to DeerFlow",
+  },
+
+  planReview: {
+    title: "Plan Review",
+    confirm: "Confirm",
+    edit: "Edit",
+    retry: "Retry",
+    save: "Save",
+    cancel: "Cancel",
+    addTodo: "Add todo",
+    emptyError: "Keep at least one todo item",
+    blankError: "Todo content cannot be empty",
   },
 
   // Subtasks

@@ -410,6 +410,14 @@ function ToolCall({
         icon={ListTodoIcon}
       ></ChainOfThoughtStep>
     );
+  } else if (name === "review_plan") {
+    return (
+      <ChainOfThoughtStep
+        key={id}
+        label={t.toolCalls.reviewPlan}
+        icon={ListTodoIcon}
+      ></ChainOfThoughtStep>
+    );
   } else {
     const description: string | undefined = (args as { description: string })
       ?.description;

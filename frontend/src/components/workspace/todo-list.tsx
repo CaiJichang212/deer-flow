@@ -38,6 +38,7 @@ export function TodoList({
 
   return (
     <div
+      data-testid="todo-list"
       className={cn(
         "flex h-fit w-full origin-bottom translate-y-4 flex-col overflow-hidden rounded-t-xl border border-b-0 bg-white backdrop-blur-sm transition-all duration-200 ease-out",
         hidden ? "pointer-events-none translate-y-8 opacity-0" : "",
@@ -45,6 +46,7 @@ export function TodoList({
       )}
     >
       <header
+        data-testid="todo-list-header"
         className={cn(
           "bg-accent flex min-h-8 shrink-0 cursor-pointer items-center justify-between px-4 text-sm transition-all duration-300 ease-out",
         )}
@@ -82,6 +84,7 @@ export function TodoList({
                   completed={todo.status === "completed"}
                 />
                 <QueueItemContent
+                  data-testid={`todo-list-item-${i}`}
                   className={
                     todo.status === "in_progress" ? "text-primary/70" : ""
                   }

@@ -1,4 +1,5 @@
 import type { BaseStream } from "@langchain/langgraph-sdk/react";
+import { useMemo, useState } from "react";
 
 import {
   Conversation,
@@ -18,7 +19,11 @@ import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { Subtask } from "@/core/tasks";
 import { useUpdateSubtask } from "@/core/tasks/context";
 import type { AgentThreadState } from "@/core/threads";
+import type { PlanReviewState } from "@/core/threads";
+import type { PlanReviewTodo } from "@/core/threads";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
 import { StreamingIndicator } from "../streaming-indicator";
@@ -37,16 +42,26 @@ export function MessageList({
   threadId,
   thread,
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
+  onPlanAction,
+  onPlanSave,
+  planReviewOverride,
 }: {
   className?: string;
   threadId: string;
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
+  onPlanAction?: (action: "confirm" | "retry", planVersion: number) => void;
+  onPlanSave?: (
+    todos: PlanReviewTodo[],
+    planVersion: number,
+  ) => Promise<boolean> | boolean;
+  planReviewOverride?: PlanReviewState | null;
 }) {
   const { t } = useI18n();
   const rehypePlugins = useRehypeSplitWordsIntoSpans(thread.isLoading);
   const updateSubtask = useUpdateSubtask();
   const messages = thread.messages;
+  const planReviewForUI = planReviewOverride ?? thread.values.plan_review;
   if (thread.isThreadLoading && messages.length === 0) {
     return <MessageListSkeleton />;
   }
@@ -80,6 +95,21 @@ export function MessageList({
               );
             }
             return null;
+          } else if (group.type === "assistant:plan-review") {
+            const planReview = planReviewForUI;
+            if (!planReview || planReview.status !== "pending_review") {
+              return null;
+            }
+            return (
+              <PlanReviewCard
+                key={group.id}
+                todos={planReview.todos ?? []}
+                version={planReview.version ?? 0}
+                title={planReview.title}
+                onAction={onPlanAction}
+                onSave={onPlanSave}
+              />
+            );
           } else if (group.type === "assistant:present-files") {
             const files: string[] = [];
             for (const message of group.messages) {
@@ -206,5 +236,169 @@ export function MessageList({
         <div style={{ height: `${paddingBottom}px` }} />
       </ConversationContent>
     </Conversation>
+  );
+}
+
+function PlanReviewCard({
+  todos,
+  version,
+  title,
+  onAction,
+  onSave,
+}: {
+  todos: PlanReviewTodo[];
+  version: number;
+  title?: string;
+  onAction?: (action: "confirm" | "retry", planVersion: number) => void;
+  onSave?: (
+    todos: PlanReviewTodo[],
+    planVersion: number,
+  ) => Promise<boolean> | boolean;
+}) {
+  const { t } = useI18n();
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<PlanReviewTodo[]>(todos);
+  const [error, setError] = useState<string>("");
+
+  const normalizedTodos = useMemo(
+    () => (isEditing ? draft : todos),
+    [draft, isEditing, todos],
+  );
+
+  return (
+    <div
+      className="bg-background w-full rounded-lg border p-4"
+      data-testid="plan-review-card"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-sm font-medium">
+          {title?.trim() || t.planReview.title} · v{version}
+        </div>
+        {!isEditing ? (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => onAction?.("confirm", version)}
+              data-testid="plan-review-confirm"
+            >
+              {t.planReview.confirm}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDraft(todos);
+                setError("");
+                setIsEditing(true);
+              }}
+              data-testid="plan-review-edit"
+            >
+              {t.planReview.edit}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onAction?.("retry", version)}
+              data-testid="plan-review-retry"
+            >
+              {t.planReview.retry}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={async () => {
+                if (draft.length === 0) {
+                  setError(t.planReview.emptyError);
+                  return;
+                }
+                if (draft.some((todo) => !todo.content.trim())) {
+                  setError(t.planReview.blankError);
+                  return;
+                }
+                const result = await onSave?.(
+                  draft.map((todo) => ({ ...todo, content: todo.content.trim() })),
+                  version,
+                );
+                if (result === false) {
+                  return;
+                }
+                setError("");
+                setIsEditing(false);
+              }}
+              data-testid="plan-review-save"
+            >
+              {t.planReview.save}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDraft(todos);
+                setError("");
+                setIsEditing(false);
+              }}
+              data-testid="plan-review-cancel"
+            >
+              {t.planReview.cancel}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        {normalizedTodos.map((todo, idx) => (
+          <div key={idx} className="flex items-start gap-2">
+            <div className="text-muted-foreground mt-2 text-xs">{idx + 1}.</div>
+            {isEditing ? (
+              <Textarea
+                className="min-h-10"
+                value={todo.content}
+                data-testid={`plan-review-input-${idx}`}
+                onChange={(event) => {
+                  const next = [...draft];
+                  next[idx] = { ...next[idx], content: event.target.value };
+                  setDraft(next);
+                }}
+              />
+            ) : (
+              <div className="text-sm" data-testid={`plan-review-item-${idx}`}>
+                {todo.content}
+              </div>
+            )}
+            {isEditing && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const next = draft.filter((_, i) => i !== idx);
+                  setDraft(next);
+                }}
+                data-testid={`plan-review-remove-${idx}`}
+              >
+                ×
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {isEditing && (
+        <div className="mt-3 flex items-center justify-between">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setDraft([...draft, { content: "" }])}
+            data-testid="plan-review-add"
+          >
+            {t.planReview.addTodo}
+          </Button>
+          {error && <div className="text-destructive text-xs">{error}</div>}
+        </div>
+      )}
+    </div>
   );
 }

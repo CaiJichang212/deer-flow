@@ -264,7 +264,20 @@ export const zhCN: Translations = {
     writeFile: "写入文件",
     clickToViewContent: "点击查看文件内容",
     writeTodos: "更新 To-do 列表",
+    reviewPlan: "提交计划审核",
     skillInstallTooltip: "安装技能并使其可在 DeerFlow 中使用",
+  },
+
+  planReview: {
+    title: "计划审核",
+    confirm: "确认",
+    edit: "编辑",
+    retry: "重试",
+    save: "保存",
+    cancel: "取消",
+    addTodo: "新增任务",
+    emptyError: "至少保留 1 条任务",
+    blankError: "任务内容不能为空",
   },
 
   uploads: {

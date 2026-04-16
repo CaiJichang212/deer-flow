@@ -208,7 +208,20 @@ export interface Translations {
     writeFile: string;
     clickToViewContent: string;
     writeTodos: string;
+    reviewPlan: string;
     skillInstallTooltip: string;
+  };
+
+  planReview: {
+    title: string;
+    confirm: string;
+    edit: string;
+    retry: string;
+    save: string;
+    cancel: string;
+    addTodo: string;
+    emptyError: string;
+    blankError: string;
   };
 
   // Uploads
