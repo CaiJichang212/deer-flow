@@ -8,11 +8,20 @@ export interface PlanReviewTodo {
 }
 
 export interface PlanReviewState {
-  status: "pending_review" | "approved" | "executing" | "completed";
+  status:
+    | "pending_review"
+    | "approved"
+    | "executing"
+    | "completed"
+    | "failed";
   version: number;
   todos: PlanReviewTodo[];
   updated_at: number;
   title?: string;
+  error_code?: string;
+  error_message?: string;
+  consecutive_failures?: number;
+  last_event_at?: number;
 }
 
 export interface AgentThreadState extends Record<string, unknown> {

@@ -136,3 +136,28 @@ test("编辑计划保存后，计划卡片和 To-dos 同步为同一份内容", 
     savedPayload.values?.todos,
   );
 });
+
+test("failed 态显示错误并仅保留编辑/重试操作", async ({ page }) => {
+  await page.route(`**/mock/api/threads/${threadId}/history`, async (route) => {
+    const data = buildHistoryResponse();
+    const first = data[0]!;
+    const planReview = first.values.plan_review as Record<string, unknown>;
+    planReview.status = "failed";
+    planReview.error_code = "PLAN_EXECUTION_FAILED";
+    planReview.error_message = "执行阶段发生连续模型失败，请重试计划。";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(data),
+    });
+  });
+
+  await page.goto(`/workspace/chats/${threadId}?mock=true`);
+  await expect(page.getByTestId("plan-review-card")).toBeVisible();
+  await expect(page.getByTestId("plan-review-failed-banner")).toContainText(
+    "执行阶段发生连续模型失败",
+  );
+  await expect(page.getByTestId("plan-review-confirm")).toHaveCount(0);
+  await expect(page.getByTestId("plan-review-edit")).toBeVisible();
+  await expect(page.getByTestId("plan-review-retry")).toBeVisible();
+});

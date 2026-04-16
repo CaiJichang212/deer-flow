@@ -222,6 +222,8 @@ export interface Translations {
     addTodo: string;
     emptyError: string;
     blankError: string;
+    failedTitle: string;
+    failedRetryHint: string;
   };
 
   // Uploads

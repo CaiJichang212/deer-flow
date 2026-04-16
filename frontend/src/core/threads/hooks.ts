@@ -285,6 +285,24 @@ export function useThreadStream({
         const e = event as { type: "llm_retry"; message: string };
         toast(e.message);
       }
+
+      if (
+        typeof event === "object" &&
+        event !== null &&
+        "type" in event &&
+        event.type === "plan_fallback"
+      ) {
+        const e = event as {
+          type: "plan_fallback";
+          level?: "soft" | "hard";
+          message?: string;
+        };
+        if (typeof e.message === "string" && e.message.trim()) {
+          toast(e.message);
+        } else if (e.level === "hard") {
+          toast("计划执行失败，请重试计划。");
+        }
+      }
     },
     onError(error) {
       setOptimisticMessages([]);

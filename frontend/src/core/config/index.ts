@@ -18,6 +18,14 @@ export function getBackendBaseURL() {
   }
 }
 
+export function isFollowupSuggestionsEnabled() {
+  const value = env.NEXT_PUBLIC_FOLLOWUP_SUGGESTIONS_ENABLED;
+  if (!value) {
+    return false;
+  }
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
 export function getLangGraphBaseURL(isMock?: boolean) {
   if (env.NEXT_PUBLIC_LANGGRAPH_BASE_URL) {
     return new URL(

@@ -97,7 +97,11 @@ export function MessageList({
             return null;
           } else if (group.type === "assistant:plan-review") {
             const planReview = planReviewForUI;
-            if (!planReview || planReview.status !== "pending_review") {
+            if (
+              !planReview ||
+              (planReview.status !== "pending_review" &&
+                planReview.status !== "failed")
+            ) {
               return null;
             }
             return (
@@ -106,6 +110,9 @@ export function MessageList({
                 todos={planReview.todos ?? []}
                 version={planReview.version ?? 0}
                 title={planReview.title}
+                status={planReview.status}
+                errorCode={planReview.error_code}
+                errorMessage={planReview.error_message}
                 onAction={onPlanAction}
                 onSave={onPlanSave}
               />
@@ -243,12 +250,18 @@ function PlanReviewCard({
   todos,
   version,
   title,
+  status,
+  errorCode,
+  errorMessage,
   onAction,
   onSave,
 }: {
   todos: PlanReviewTodo[];
   version: number;
   title?: string;
+  status: "pending_review" | "failed";
+  errorCode?: string;
+  errorMessage?: string;
   onAction?: (action: "confirm" | "retry", planVersion: number) => void;
   onSave?: (
     todos: PlanReviewTodo[],
@@ -276,14 +289,16 @@ function PlanReviewCard({
         </div>
         {!isEditing ? (
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => onAction?.("confirm", version)}
-              data-testid="plan-review-confirm"
-            >
-              {t.planReview.confirm}
-            </Button>
+            {status !== "failed" && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => onAction?.("confirm", version)}
+                data-testid="plan-review-confirm"
+              >
+                {t.planReview.confirm}
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -348,6 +363,22 @@ function PlanReviewCard({
           </div>
         )}
       </div>
+
+      {status === "failed" && (
+        <div
+          className="text-destructive mb-3 rounded border border-red-400/40 px-3 py-2 text-xs"
+          data-testid="plan-review-failed-banner"
+        >
+          <div className="font-medium">{t.planReview.failedTitle}</div>
+          {(errorMessage || errorCode) && (
+            <div className="mt-1">
+              {errorMessage || errorCode}
+              {errorMessage && errorCode ? ` (${errorCode})` : ""}
+            </div>
+          )}
+          <div className="mt-1 opacity-80">{t.planReview.failedRetryHint}</div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {normalizedTodos.map((todo, idx) => (

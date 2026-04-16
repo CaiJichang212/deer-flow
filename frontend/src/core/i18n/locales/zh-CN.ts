@@ -278,6 +278,8 @@ export const zhCN: Translations = {
     addTodo: "新增任务",
     emptyError: "至少保留 1 条任务",
     blankError: "任务内容不能为空",
+    failedTitle: "计划执行失败",
+    failedRetryHint: "请点击“重试”生成新计划后继续。",
   },
 
   uploads: {

@@ -55,7 +55,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { getBackendBaseURL } from "@/core/config";
+import { getBackendBaseURL, isFollowupSuggestionsEnabled } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
 import type { AgentThreadContext } from "@/core/threads";
@@ -84,6 +84,7 @@ import { ModeHoverGuide } from "./mode-hover-guide";
 import { Tooltip } from "./tooltip";
 
 type InputMode = "flash" | "thinking" | "pro" | "ultra";
+const FOLLOWUP_SUGGESTIONS_ENABLED = isFollowupSuggestionsEnabled();
 
 function getResolvedMode(
   mode: InputMode | undefined,
@@ -338,6 +339,7 @@ export function InputBox({
   }, [pendingSuggestion, requestFormSubmit, textInput]);
 
   const showFollowups =
+    FOLLOWUP_SUGGESTIONS_ENABLED &&
     !disabled &&
     !isNewThread &&
     !followupsHidden &&
@@ -358,6 +360,13 @@ export function InputBox({
   }, []);
 
   useEffect(() => {
+    if (!FOLLOWUP_SUGGESTIONS_ENABLED) {
+      setFollowups((prev) => (prev.length > 0 ? [] : prev));
+      setFollowupsHidden((prev) => (prev ? prev : true));
+      setFollowupsLoading((prev) => (prev ? false : prev));
+      return;
+    }
+
     const streaming = status === "streaming";
     const wasStreaming = wasStreamingRef.current;
     wasStreamingRef.current = streaming;

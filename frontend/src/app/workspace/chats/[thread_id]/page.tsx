@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -46,6 +46,7 @@ export default function ChatPage() {
   const [todosOverride, setTodosOverride] = useState<PlanReviewTodo[] | null>(
     null,
   );
+  const lastPlanErrorRef = useRef<string>("");
   useSpecificChatMode();
 
   useEffect(() => {
@@ -87,7 +88,9 @@ export default function ChatPage() {
     if (
       planReviewOverride &&
       remotePlanReview &&
-      remotePlanReview.version >= planReviewOverride.version
+      (remotePlanReview.status === "failed" ||
+        remotePlanReview.status === "completed" ||
+        remotePlanReview.version >= planReviewOverride.version)
     ) {
       setPlanReviewOverride(null);
     }
@@ -104,6 +107,17 @@ export default function ChatPage() {
   }, [todosOverride, thread.values.todos]);
 
   const effectivePlanReview = planReviewOverride ?? thread.values.plan_review;
+  useEffect(() => {
+    if (effectivePlanReview?.status !== "failed") {
+      return;
+    }
+    const msg = (effectivePlanReview.error_message || "").trim();
+    if (!msg || msg === lastPlanErrorRef.current) {
+      return;
+    }
+    lastPlanErrorRef.current = msg;
+    toast.error(msg);
+  }, [effectivePlanReview]);
   const effectiveTodos = useMemo(() => {
     const source = todosOverride ?? (thread.values.todos ?? []);
     return source.map((todo) => {
@@ -132,6 +146,9 @@ export default function ChatPage() {
 
   const handlePlanAction = useCallback(
     (action: "confirm" | "retry", planVersion: number) => {
+      const planReview = planReviewOverride ?? thread.values.plan_review;
+      const nextAction =
+        planReview?.status === "failed" ? "retry" : action;
       setPlanReviewOverride(null);
       void sendMessage(
         threadId,
@@ -140,13 +157,13 @@ export default function ChatPage() {
         {
           additionalKwargs: {
             hide_from_ui: true,
-            plan_action: action,
+            plan_action: nextAction,
             plan_version: planVersion,
           },
         },
       );
     },
-    [sendMessage, threadId],
+    [planReviewOverride, sendMessage, thread.values.plan_review, threadId],
   );
 
   const handlePlanSave = useCallback(

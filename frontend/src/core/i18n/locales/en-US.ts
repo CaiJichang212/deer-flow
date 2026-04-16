@@ -291,6 +291,8 @@ export const enUS: Translations = {
     addTodo: "Add todo",
     emptyError: "Keep at least one todo item",
     blankError: "Todo content cannot be empty",
+    failedTitle: "Plan Execution Failed",
+    failedRetryHint: "Click retry to regenerate plan before continuing.",
   },
 
   // Subtasks
