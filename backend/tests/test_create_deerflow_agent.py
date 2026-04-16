@@ -629,6 +629,9 @@ def test_plan_mode_adds_todo_middleware(mock_create_agent):
     call_kwargs = mock_create_agent.call_args[1]
     mw_types = [type(m).__name__ for m in call_kwargs["middleware"]]
     assert "TodoMiddleware" in mw_types
+    assert "PlanReviewMiddleware" in mw_types
+    tool_names = [t.name for t in call_kwargs["tools"]]
+    assert "review_plan" in tool_names
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +645,7 @@ def test_plan_mode_default_no_todo(mock_create_agent):
     call_kwargs = mock_create_agent.call_args[1]
     mw_types = [type(m).__name__ for m in call_kwargs["middleware"]]
     assert "TodoMiddleware" not in mw_types
+    assert "PlanReviewMiddleware" not in mw_types
 
 
 # ---------------------------------------------------------------------------
@@ -747,6 +751,7 @@ def test_full_chain_order(mock_create_agent):
         "ViewImageMiddleware",
         "SubagentLimitMiddleware",
         "LoopDetectionMiddleware",
+        "PlanReviewMiddleware",
         "ClarificationMiddleware",
     ]
     assert mw_types == expected_order

@@ -91,7 +91,10 @@ class TestTitleMiddlewareCoreLogic:
         title = result["title"]
 
         assert title == "短标题"
-        title_middleware_module.create_chat_model.assert_called_once_with(thinking_enabled=False)
+        title_middleware_module.create_chat_model.assert_called_once_with(
+            thinking_enabled=False,
+            reasoning_effort="minimal",
+        )
         model.ainvoke.assert_awaited_once()
 
     def test_generate_title_normalizes_structured_message_content(self, monkeypatch):
@@ -129,9 +132,8 @@ class TestTitleMiddlewareCoreLogic:
         result = asyncio.run(middleware._agenerate_title_result(state))
         title = result["title"]
 
-        # Assert behavior (truncated fallback + ellipsis) without overfitting exact text.
-        assert title.endswith("...")
-        assert title.startswith("这是一个非常长的问题描述")
+        # Fallback title is hard-truncated to 10 characters without ellipsis.
+        assert title == "这是一个非常长的问题"
 
     def test_aafter_model_delegates_to_async_helper(self, monkeypatch):
         middleware = TitleMiddleware()
@@ -179,8 +181,7 @@ class TestTitleMiddlewareCoreLogic:
             ]
         }
         result = middleware._generate_title_result(state)
-        assert result["title"].endswith("...")
-        assert result["title"].startswith("这是一个非常长的问题描述")
+        assert result["title"] == "这是一个非常长的问题"
 
     def test_parse_title_strips_think_tags(self):
         """Title model responses with <think>...</think> blocks are stripped before use."""
@@ -188,7 +189,7 @@ class TestTitleMiddlewareCoreLogic:
         raw = "<think>用户想要研究贵阳发展情况。我需要使用 deep-research skill。</think>贵阳近5年发展报告研究"
         result = middleware._parse_title(raw)
         assert "<think>" not in result
-        assert result == "贵阳近5年发展报告研究"
+        assert result == "贵阳近5年发展报告研"
 
     def test_parse_title_strips_think_tags_only_response(self):
         """If model only outputs a think block and nothing else, title is empty string."""
