@@ -148,6 +148,12 @@ class TodoMiddleware(TodoListMiddleware):
         if not todos or all(t.get("status") == "completed" for t in todos):
             return None
 
+        # 3.1 If plan execution is already marked failed, don't keep forcing
+        # the model back into completion reminders.
+        plan_review = state.get("plan_review")
+        if isinstance(plan_review, dict) and plan_review.get("status") == "failed":
+            return None
+
         # 4. Enforce a reminder cap to prevent infinite re-engagement loops.
         if _completion_reminder_count(messages) >= self._MAX_COMPLETION_REMINDERS:
             return None

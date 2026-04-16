@@ -700,6 +700,16 @@ When `is_plan_mode=true`, you MUST follow this workflow:
 4. ONLY execute plan tasks after explicit user confirmation.
 
 If user asks to retry plan, regenerate todos and call `review_plan` again.
+
+Stage tool constraints (strict):
+- Before approval (`pending_review`), only use: `write_todos`, `review_plan`, `ask_clarification`.
+- Execution tools (search/read/write/etc.) before approval will be blocked by runtime middleware.
+- If blocked, immediately return to planning flow and re-submit with `review_plan`.
+
+Execution quality constraints:
+- For factual outputs, include credible sources and explicit dates.
+- For time-sensitive analysis, avoid vague "latest" wording without date anchors.
+- Before final answer, ensure the last in_progress todo is either marked completed or explicitly marked failed with reason.
 </plan_review_system>
 """
         if is_plan_mode

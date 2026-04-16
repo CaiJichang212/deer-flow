@@ -29,6 +29,10 @@ class PlanReviewState(TypedDict):
     todos: list[PlanReviewTodo]
     updated_at: int
     title: NotRequired[str]
+    error_code: NotRequired[str]
+    error_message: NotRequired[str]
+    consecutive_failures: NotRequired[int]
+    last_event_at: NotRequired[int]
 
 
 def merge_artifacts(existing: list[str] | None, new: list[str] | None) -> list[str]:

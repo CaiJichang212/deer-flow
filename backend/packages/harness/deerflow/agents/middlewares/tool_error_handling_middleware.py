@@ -92,6 +92,10 @@ def _build_runtime_middlewares(
         middlewares.append(DanglingToolCallMiddleware())
 
     middlewares.append(LLMErrorHandlingMiddleware())
+    from deerflow.agents.middlewares.tool_args_sanitization_middleware import (
+        ToolArgsSanitizationMiddleware,
+    )
+    middlewares.append(ToolArgsSanitizationMiddleware())
 
     # Guardrail middleware (if configured)
     from deerflow.config.guardrails_config import get_guardrails_config

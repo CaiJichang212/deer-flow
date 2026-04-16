@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from langchain_core.messages import ToolMessage
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 
@@ -81,6 +82,7 @@ def test_pending_review_blocks_execution_without_confirm():
     assert isinstance(result, Command)
     assert result.goto == "__end__"
     assert result.update["messages"][0].status == "error"
+    assert "PLAN_ACTION_REQUIRED" in result.update["messages"][0].text
 
 
 def test_pro_mode_requires_review_plan_before_execution():
@@ -122,12 +124,16 @@ def test_confirm_transitions_to_executing_and_allows_execution():
 
     before_update = middleware.before_model(state, _runtime())
     assert before_update is not None
-    assert before_update["plan_review"]["status"] == "executing"
+    assert before_update["plan_review"]["status"] == "approved"
     assert before_update["todos"] == before_update["plan_review"]["todos"]
 
-    request = _request(name="read_file", state=state)
-    result = middleware.wrap_tool_call(request, lambda _req: "ok")
-    assert result == "ok"
+    request = _request(name="read_file", state={**state, **before_update})
+    result = middleware.wrap_tool_call(
+        request,
+        lambda _req: ToolMessage(content="ok", tool_call_id="tc-1", name="read_file"),
+    )
+    assert isinstance(result, Command)
+    assert result.update["plan_review"]["status"] == "executing"
 
 
 def test_retry_keeps_pending_and_only_allows_planning_tools():
@@ -153,10 +159,60 @@ def test_retry_keeps_pending_and_only_allows_planning_tools():
 
     before_update = middleware.before_model(state, _runtime())
     assert before_update is not None
-    assert "plan_review" not in before_update
+    assert before_update["plan_review"]["status"] == "pending_review"
+    assert before_update["plan_review"]["error_code"] == ""
+    assert before_update["plan_review"]["error_message"] == ""
     assert before_update["messages"][0].name == "plan_review_retry"
 
     blocked = middleware.wrap_tool_call(_request(name="read_file", state=state), lambda _req: "x")
     assert isinstance(blocked, Command)
     allowed = middleware.wrap_tool_call(_request(name="write_todos", state=state), lambda _req: "ok")
     assert allowed == "ok"
+
+
+def test_confirm_version_mismatch_blocks_execution():
+    middleware = PlanReviewMiddleware()
+    state = {
+        "plan_review": {
+            "status": "pending_review",
+            "version": 3,
+            "todos": [{"content": "a"}],
+            "updated_at": 1,
+        },
+        "messages": [
+            HumanMessage(
+                content="",
+                additional_kwargs={
+                    "hide_from_ui": True,
+                    "plan_action": "confirm",
+                    "plan_version": 2,
+                },
+            )
+        ],
+    }
+
+    before_update = middleware.before_model(state, _runtime())
+    assert before_update is not None
+    assert before_update["plan_review"]["status"] == "pending_review"
+    assert before_update["plan_review"]["error_code"] == "PLAN_VERSION_MISMATCH"
+
+
+def test_terminal_states_block_execution_tools():
+    middleware = PlanReviewMiddleware()
+    for status in ("completed", "failed"):
+        request = _request(
+            name="read_file",
+            state={
+                "plan_review": {
+                    "status": status,
+                    "version": 1,
+                    "todos": [{"content": "a"}],
+                    "updated_at": 1,
+                },
+                "messages": [HumanMessage(content="继续")],
+            },
+        )
+        result = middleware.wrap_tool_call(request, lambda _req: "x")
+        assert isinstance(result, Command)
+        assert result.goto == "__end__"
+        assert "PLAN_TERMINAL_STATE" in result.update["messages"][0].text

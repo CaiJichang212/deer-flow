@@ -81,6 +81,8 @@ def create_app() -> FastAPI:
         Configured FastAPI application instance.
     """
 
+    config = get_gateway_config()
+
     app = FastAPI(
         title="DeerFlow API Gateway",
         description="""
@@ -190,8 +192,11 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
     # Agents API is mounted at /api/agents
     app.include_router(agents.router)
 
-    # Suggestions API is mounted at /api/threads/{thread_id}/suggestions
-    app.include_router(suggestions.router)
+    if config.followup_suggestions_enabled:
+        # Suggestions API is mounted at /api/threads/{thread_id}/suggestions
+        app.include_router(suggestions.router)
+    else:
+        logger.info("Follow-up suggestions API is disabled by default")
 
     # Channels API is mounted at /api/channels
     app.include_router(channels.router)

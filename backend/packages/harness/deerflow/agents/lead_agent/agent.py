@@ -9,7 +9,16 @@ from deerflow.agents.memory.summarization_hook import memory_flush_hook
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
+from deerflow.agents.middlewares.plan_execution_guard_middleware import (
+    PlanExecutionGuardMiddleware,
+)
 from deerflow.agents.middlewares.plan_review_middleware import PlanReviewMiddleware
+from deerflow.agents.middlewares.plan_tool_whitelist_middleware import (
+    PlanToolWhitelistMiddleware,
+)
+from deerflow.agents.middlewares.search_query_rewrite_middleware import (
+    SearchQueryRewriteMiddleware,
+)
 from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from deerflow.agents.middlewares.summarization_middleware import BeforeSummarizationHook, DeerFlowSummarizationMiddleware
 from deerflow.agents.middlewares.title_middleware import TitleMiddleware
@@ -267,8 +276,14 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
         max_concurrent_subagents = config.get("configurable", {}).get("max_concurrent_subagents", 3)
         middlewares.append(SubagentLimitMiddleware(max_concurrent=max_concurrent_subagents))
 
+    middlewares.append(SearchQueryRewriteMiddleware())
+
     # LoopDetectionMiddleware — detect and break repetitive tool call loops
     middlewares.append(LoopDetectionMiddleware())
+
+    if is_plan_mode:
+        middlewares.append(PlanExecutionGuardMiddleware())
+        middlewares.append(PlanToolWhitelistMiddleware())
 
     # Inject custom middlewares before ClarificationMiddleware
     if custom_middlewares:

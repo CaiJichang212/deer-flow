@@ -20,8 +20,17 @@ from langchain.agents.middleware import AgentMiddleware
 
 from deerflow.agents.features import RuntimeFeatures
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from deerflow.agents.middlewares.plan_execution_guard_middleware import (
+    PlanExecutionGuardMiddleware,
+)
 from deerflow.agents.middlewares.dangling_tool_call_middleware import DanglingToolCallMiddleware
 from deerflow.agents.middlewares.plan_review_middleware import PlanReviewMiddleware
+from deerflow.agents.middlewares.plan_tool_whitelist_middleware import (
+    PlanToolWhitelistMiddleware,
+)
+from deerflow.agents.middlewares.search_query_rewrite_middleware import (
+    SearchQueryRewriteMiddleware,
+)
 from deerflow.agents.middlewares.tool_error_handling_middleware import ToolErrorHandlingMiddleware
 from deerflow.agents.thread_state import ThreadState
 from deerflow.tools.builtins import ask_clarification_tool, review_plan_tool
@@ -175,8 +184,11 @@ def _assemble_from_features(
       10.  ViewImageMiddleware (vision feature)
       11.  SubagentLimitMiddleware (subagent feature)
       12.  LoopDetectionMiddleware (always)
-      13.  PlanReviewMiddleware (plan_mode parameter)
-      14.  ClarificationMiddleware (always last)
+      13.  SearchQueryRewriteMiddleware (always)
+      14.  PlanExecutionGuardMiddleware (plan_mode parameter)
+      15.  PlanToolWhitelistMiddleware (plan_mode parameter)
+      16.  PlanReviewMiddleware (plan_mode parameter)
+      17.  ClarificationMiddleware (always last)
 
     Two-phase ordering:
       1. Built-in chain — fixed sequential append.
@@ -277,12 +289,15 @@ def _assemble_from_features(
     from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 
     chain.append(LoopDetectionMiddleware())
+    chain.append(SearchQueryRewriteMiddleware())
 
-    # --- [13] Plan review (plan_mode) ---
+    # --- [14-16] Plan review guards (plan_mode) ---
     if plan_mode:
+        chain.append(PlanExecutionGuardMiddleware())
+        chain.append(PlanToolWhitelistMiddleware())
         chain.append(PlanReviewMiddleware())
 
-    # --- [14] Clarification (always last among built-ins) ---
+    # --- [17] Clarification (always last among built-ins) ---
     chain.append(ClarificationMiddleware())
     extra_tools.append(ask_clarification_tool)
 

@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+from app.gateway.config import GatewayConfig
 from app.gateway.routers import suggestions
 
 
@@ -44,6 +45,11 @@ def test_generate_suggestions_parses_and_limits(monkeypatch):
     )
     fake_model = MagicMock()
     fake_model.ainvoke = AsyncMock(return_value=MagicMock(content='```json\n["Q1", "Q2", "Q3", "Q4"]\n```'))
+    monkeypatch.setattr(
+        suggestions,
+        "get_gateway_config",
+        lambda: GatewayConfig(followup_suggestions_enabled=True),
+    )
     monkeypatch.setattr(suggestions, "create_chat_model", lambda **kwargs: fake_model)
 
     result = asyncio.run(suggestions.generate_suggestions("t1", req))
@@ -62,6 +68,11 @@ def test_generate_suggestions_parses_list_block_content(monkeypatch):
     )
     fake_model = MagicMock()
     fake_model.ainvoke = AsyncMock(return_value=MagicMock(content=[{"type": "text", "text": '```json\n["Q1", "Q2"]\n```'}]))
+    monkeypatch.setattr(
+        suggestions,
+        "get_gateway_config",
+        lambda: GatewayConfig(followup_suggestions_enabled=True),
+    )
     monkeypatch.setattr(suggestions, "create_chat_model", lambda **kwargs: fake_model)
 
     result = asyncio.run(suggestions.generate_suggestions("t1", req))
@@ -80,6 +91,11 @@ def test_generate_suggestions_parses_output_text_block_content(monkeypatch):
     )
     fake_model = MagicMock()
     fake_model.ainvoke = AsyncMock(return_value=MagicMock(content=[{"type": "output_text", "text": '```json\n["Q1", "Q2"]\n```'}]))
+    monkeypatch.setattr(
+        suggestions,
+        "get_gateway_config",
+        lambda: GatewayConfig(followup_suggestions_enabled=True),
+    )
     monkeypatch.setattr(suggestions, "create_chat_model", lambda **kwargs: fake_model)
 
     result = asyncio.run(suggestions.generate_suggestions("t1", req))
@@ -95,8 +111,34 @@ def test_generate_suggestions_returns_empty_on_model_error(monkeypatch):
     )
     fake_model = MagicMock()
     fake_model.ainvoke = AsyncMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(
+        suggestions,
+        "get_gateway_config",
+        lambda: GatewayConfig(followup_suggestions_enabled=True),
+    )
     monkeypatch.setattr(suggestions, "create_chat_model", lambda **kwargs: fake_model)
 
     result = asyncio.run(suggestions.generate_suggestions("t1", req))
 
     assert result.suggestions == []
+
+
+def test_generate_suggestions_returns_empty_when_disabled(monkeypatch):
+    req = suggestions.SuggestionsRequest(
+        messages=[suggestions.SuggestionMessage(role="user", content="Hi")],
+        n=2,
+        model_name=None,
+    )
+    fake_model = MagicMock()
+    fake_model.ainvoke = AsyncMock(return_value=MagicMock(content='["Q1"]'))
+    monkeypatch.setattr(
+        suggestions,
+        "get_gateway_config",
+        lambda: GatewayConfig(followup_suggestions_enabled=False),
+    )
+    monkeypatch.setattr(suggestions, "create_chat_model", lambda **kwargs: fake_model)
+
+    result = asyncio.run(suggestions.generate_suggestions("t1", req))
+
+    assert result.suggestions == []
+    fake_model.ainvoke.assert_not_called()

@@ -91,6 +91,44 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         self._circuit_open_until = 0.0
         self._circuit_state = "closed"
         self._circuit_probe_in_flight = False
+        self._thread_failures_lock = threading.Lock()
+        self._thread_failures: dict[str, int] = {}
+
+    def _get_thread_id(self, request: ModelRequest) -> str:
+        runtime = getattr(request, "runtime", None)
+        context = getattr(runtime, "context", None)
+        if isinstance(context, dict):
+            thread_id = context.get("thread_id")
+            if isinstance(thread_id, str) and thread_id:
+                return thread_id
+        return "default"
+
+    def _record_thread_success(self, thread_id: str) -> None:
+        with self._thread_failures_lock:
+            self._thread_failures.pop(thread_id, None)
+
+    def _record_thread_failure(self, thread_id: str) -> int:
+        with self._thread_failures_lock:
+            count = self._thread_failures.get(thread_id, 0) + 1
+            self._thread_failures[thread_id] = count
+            return count
+
+    def _emit_plan_fallback(self, *, level: str, reason: str, thread_id: str) -> None:
+        try:
+            from langgraph.config import get_stream_writer
+
+            writer = get_stream_writer()
+            writer(
+                {
+                    "type": "plan_fallback",
+                    "level": level,
+                    "reason": reason,
+                    "thread_id": thread_id,
+                    "message": "检测到模型连续失败，建议重试计划或收敛工具调用。",
+                }
+            )
+        except Exception:
+            logger.debug("Failed to emit plan_fallback event", exc_info=True)
 
     def _check_circuit(self) -> bool:
         """Returns True if circuit is OPEN (fast fail), False otherwise."""
@@ -218,6 +256,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelCallResult:
+        thread_id = self._get_thread_id(request)
         if self._check_circuit():
             return AIMessage(content=self._build_circuit_breaker_message())
 
@@ -226,6 +265,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
             try:
                 response = handler(request)
                 self._record_success()
+                self._record_thread_success(thread_id)
                 return response
             except GraphBubbleUp:
                 # Preserve LangGraph control-flow signals (interrupt/pause/resume).
@@ -256,6 +296,31 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
                 )
                 if retriable:
                     self._record_failure()
+                    thread_failures = self._record_thread_failure(thread_id)
+                    logger.info(
+                        "metric=plan_fallback_trigger_count level=%s failures=%s thread_id=%s",
+                        "hard" if thread_failures >= 3 else "soft" if thread_failures >= 2 else "none",
+                        thread_failures,
+                        thread_id,
+                    )
+                    if thread_failures >= 3:
+                        self._emit_plan_fallback(
+                            level="hard",
+                            reason="consecutive_retriable_llm_failures",
+                            thread_id=thread_id,
+                        )
+                        return AIMessage(
+                            content="计划执行层连续失败，已进入保护模式。请点击“重试”生成新计划后继续。",
+                        )
+                    if thread_failures >= 2:
+                        self._emit_plan_fallback(
+                            level="soft",
+                            reason="consecutive_retriable_llm_failures",
+                            thread_id=thread_id,
+                        )
+                        return AIMessage(
+                            content="检测到连续模型失败。请减少本轮工具调用复杂度，或点击“重试”重新生成计划。",
+                        )
                 return AIMessage(content=self._build_user_message(exc, reason))
 
     @override
@@ -264,6 +329,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelCallResult:
+        thread_id = self._get_thread_id(request)
         if self._check_circuit():
             return AIMessage(content=self._build_circuit_breaker_message())
 
@@ -272,6 +338,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
             try:
                 response = await handler(request)
                 self._record_success()
+                self._record_thread_success(thread_id)
                 return response
             except GraphBubbleUp:
                 # Preserve LangGraph control-flow signals (interrupt/pause/resume).
@@ -302,6 +369,31 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
                 )
                 if retriable:
                     self._record_failure()
+                    thread_failures = self._record_thread_failure(thread_id)
+                    logger.info(
+                        "metric=plan_fallback_trigger_count level=%s failures=%s thread_id=%s",
+                        "hard" if thread_failures >= 3 else "soft" if thread_failures >= 2 else "none",
+                        thread_failures,
+                        thread_id,
+                    )
+                    if thread_failures >= 3:
+                        self._emit_plan_fallback(
+                            level="hard",
+                            reason="consecutive_retriable_llm_failures",
+                            thread_id=thread_id,
+                        )
+                        return AIMessage(
+                            content="计划执行层连续失败，已进入保护模式。请点击“重试”生成新计划后继续。",
+                        )
+                    if thread_failures >= 2:
+                        self._emit_plan_fallback(
+                            level="soft",
+                            reason="consecutive_retriable_llm_failures",
+                            thread_id=thread_id,
+                        )
+                        return AIMessage(
+                            content="检测到连续模型失败。请减少本轮工具调用复杂度，或点击“重试”重新生成计划。",
+                        )
                 return AIMessage(content=self._build_user_message(exc, reason))
 
 
