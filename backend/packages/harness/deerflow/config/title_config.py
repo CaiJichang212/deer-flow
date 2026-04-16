@@ -17,7 +17,7 @@ class TitleConfig(BaseModel):
         description="Maximum number of words in the generated title",
     )
     max_chars: int = Field(
-        default=60,
+        default=10,
         ge=10,
         le=200,
         description="Maximum number of characters in the generated title",
@@ -27,7 +27,17 @@ class TitleConfig(BaseModel):
         description="Model name to use for title generation (None = use default model)",
     )
     prompt_template: str = Field(
-        default=("Generate a concise title (max {max_words} words) for this conversation.\nUser: {user_msg}\nAssistant: {assistant_msg}\n\nReturn ONLY the title, no quotes, no explanation."),
+        default=(
+            "You generate conversation titles.\n"
+            "Task: Return ONE concise title only.\n"
+            "Hard rules:\n"
+            "1) Do NOT output thinking process, counting, constraints analysis, or explanation.\n"
+            "2) Do NOT use quotes, markdown, numbering, or prefixes.\n"
+            "3) Keep the title within {max_chars} characters.\n"
+            "4) Output title text only.\n\n"
+            "User: {user_msg}\n"
+            "Assistant: {assistant_msg}"
+        ),
         description="Prompt template for title generation",
     )
 

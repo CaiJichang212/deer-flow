@@ -401,6 +401,8 @@ User: "staging"
 You: "Deploying to staging..." [proceed]
 </clarification_system>
 
+{plan_review_section}
+
 {skills_section}
 
 {deferred_tools_section}
@@ -674,13 +676,35 @@ def _build_custom_mounts_section() -> str:
     return f"\n**Custom Mounted Directories:**\n{mounts_list}\n- If the user needs files outside `/mnt/user-data`, use these absolute container paths directly when they match the requested directory"
 
 
-def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagents: int = 3, *, agent_name: str | None = None, available_skills: set[str] | None = None) -> str:
+def apply_prompt_template(
+    subagent_enabled: bool = False,
+    is_plan_mode: bool = False,
+    max_concurrent_subagents: int = 3,
+    *,
+    agent_name: str | None = None,
+    available_skills: set[str] | None = None,
+) -> str:
     # Get memory context
     memory_context = _get_memory_context(agent_name)
 
     # Include subagent section only if enabled (from runtime parameter)
     n = max_concurrent_subagents
     subagent_section = _build_subagent_section(n) if subagent_enabled else ""
+    plan_review_section = (
+        """
+<plan_review_system>
+When `is_plan_mode=true`, you MUST follow this workflow:
+1. Build/update todo plan with `write_todos`.
+2. Call `review_plan` to submit plan for user review.
+3. Stop and wait for user decision.
+4. ONLY execute plan tasks after explicit user confirmation.
+
+If user asks to retry plan, regenerate todos and call `review_plan` again.
+</plan_review_system>
+"""
+        if is_plan_mode
+        else ""
+    )
 
     # Add subagent reminder to critical_reminders if enabled
     subagent_reminder = (
@@ -719,6 +743,7 @@ def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagen
         deferred_tools_section=deferred_tools_section,
         memory_context=memory_context,
         subagent_section=subagent_section,
+        plan_review_section=plan_review_section,
         subagent_reminder=subagent_reminder,
         subagent_thinking=subagent_thinking,
         acp_section=acp_and_mounts_section,

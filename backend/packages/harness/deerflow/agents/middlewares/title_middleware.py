@@ -12,6 +12,7 @@ from deerflow.config.title_config import get_title_config
 from deerflow.models import create_chat_model
 
 logger = logging.getLogger(__name__)
+_HARD_TITLE_CHAR_LIMIT = 10
 
 
 class TitleMiddlewareState(AgentState):
@@ -24,6 +25,10 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
     """Automatically generate a title for the thread after the first user message."""
 
     state_schema = TitleMiddlewareState
+
+    def _effective_max_chars(self) -> int:
+        config = get_title_config()
+        return min(config.max_chars, _HARD_TITLE_CHAR_LIMIT)
 
     def _normalize_content(self, content: object) -> str:
         if isinstance(content, str):
@@ -82,8 +87,9 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
 
         prompt = config.prompt_template.format(
             max_words=config.max_words,
-            user_msg=user_msg[:500],
-            assistant_msg=assistant_msg[:500],
+            max_chars=self._effective_max_chars(),
+            user_msg=user_msg[:240],
+            assistant_msg=assistant_msg[:240],
         )
         return prompt, user_msg
 
@@ -93,18 +99,22 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
 
     def _parse_title(self, content: object) -> str:
         """Normalize model output into a clean title string."""
-        config = get_title_config()
         title_content = self._normalize_content(content)
         title_content = self._strip_think_tags(title_content)
-        title = title_content.strip().strip('"').strip("'")
-        return title[: config.max_chars] if len(title) > config.max_chars else title
+        # Keep only the first non-empty line to avoid verbose multi-line output.
+        lines = [line.strip() for line in title_content.splitlines() if line.strip()]
+        title = lines[0] if lines else ""
+        # Strip common prefixes.
+        title = re.sub(r"^(title|标题|输出|output)\s*[:：]\s*", "", title, flags=re.IGNORECASE).strip()
+        title = title.strip('"').strip("'")
+        max_chars = self._effective_max_chars()
+        return title[:max_chars] if len(title) > max_chars else title
 
     def _fallback_title(self, user_msg: str) -> str:
-        config = get_title_config()
-        fallback_chars = min(config.max_chars, 50)
-        if len(user_msg) > fallback_chars:
-            return user_msg[:fallback_chars].rstrip() + "..."
-        return user_msg if user_msg else "New Conversation"
+        max_chars = self._effective_max_chars()
+        if not user_msg:
+            return "New Chat"[:max_chars]
+        return user_msg[:max_chars]
 
     def _generate_title_result(self, state: TitleMiddlewareState) -> dict | None:
         """Generate a local fallback title without blocking on an LLM call."""
@@ -124,9 +134,16 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
 
         try:
             if config.model_name:
-                model = create_chat_model(name=config.model_name, thinking_enabled=False)
+                model = create_chat_model(
+                    name=config.model_name,
+                    thinking_enabled=False,
+                    reasoning_effort="minimal",
+                )
             else:
-                model = create_chat_model(thinking_enabled=False)
+                model = create_chat_model(
+                    thinking_enabled=False,
+                    reasoning_effort="minimal",
+                )
             response = await model.ainvoke(prompt)
             title = self._parse_title(response.content)
             if title:

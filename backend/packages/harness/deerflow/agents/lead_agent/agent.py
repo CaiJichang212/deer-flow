@@ -9,6 +9,7 @@ from deerflow.agents.memory.summarization_hook import memory_flush_hook
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
+from deerflow.agents.middlewares.plan_review_middleware import PlanReviewMiddleware
 from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from deerflow.agents.middlewares.summarization_middleware import BeforeSummarizationHook, DeerFlowSummarizationMiddleware
 from deerflow.agents.middlewares.title_middleware import TitleMiddleware
@@ -206,11 +207,12 @@ Being proactive with task management demonstrates thoroughness and ensures all r
 # UploadsMiddleware should be after ThreadDataMiddleware to access thread_id
 # DanglingToolCallMiddleware patches missing ToolMessages before model sees the history
 # SummarizationMiddleware should be early to reduce context before other processing
-# TodoListMiddleware should be before ClarificationMiddleware to allow todo management
+# TodoListMiddleware should be before PlanReviewMiddleware/ClarificationMiddleware
 # TitleMiddleware generates title after first exchange
 # MemoryMiddleware queues conversation for memory update (after TitleMiddleware)
 # ViewImageMiddleware should be before ClarificationMiddleware to inject image details before LLM
-# ToolErrorHandlingMiddleware should be before ClarificationMiddleware to convert tool exceptions to ToolMessages
+# ToolErrorHandlingMiddleware should be before plan/clarification middlewares
+# PlanReviewMiddleware intercepts review_plan and enforces pending-review execution gating
 # ClarificationMiddleware should be last to intercept clarification requests after model calls
 def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_name: str | None = None, custom_middlewares: list[AgentMiddleware] | None = None):
     """Build middleware chain based on runtime configuration.
@@ -271,6 +273,10 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
     # Inject custom middlewares before ClarificationMiddleware
     if custom_middlewares:
         middlewares.extend(custom_middlewares)
+
+    # PlanReviewMiddleware is only active in plan mode and should run right before ClarificationMiddleware.
+    if is_plan_mode:
+        middlewares.append(PlanReviewMiddleware())
 
     # ClarificationMiddleware should always be last
     middlewares.append(ClarificationMiddleware())
@@ -341,7 +347,12 @@ def make_lead_agent(config: RunnableConfig):
             model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled),
             tools=get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled) + [setup_agent],
             middleware=_build_middlewares(config, model_name=model_name),
-            system_prompt=apply_prompt_template(subagent_enabled=subagent_enabled, max_concurrent_subagents=max_concurrent_subagents, available_skills=set(["bootstrap"])),
+            system_prompt=apply_prompt_template(
+                subagent_enabled=subagent_enabled,
+                is_plan_mode=is_plan_mode,
+                max_concurrent_subagents=max_concurrent_subagents,
+                available_skills=set(["bootstrap"]),
+            ),
             state_schema=ThreadState,
         )
 
@@ -351,7 +362,11 @@ def make_lead_agent(config: RunnableConfig):
         tools=get_available_tools(model_name=model_name, groups=agent_config.tool_groups if agent_config else None, subagent_enabled=subagent_enabled),
         middleware=_build_middlewares(config, model_name=model_name, agent_name=agent_name),
         system_prompt=apply_prompt_template(
-            subagent_enabled=subagent_enabled, max_concurrent_subagents=max_concurrent_subagents, agent_name=agent_name, available_skills=set(agent_config.skills) if agent_config and agent_config.skills is not None else None
+            subagent_enabled=subagent_enabled,
+            is_plan_mode=is_plan_mode,
+            max_concurrent_subagents=max_concurrent_subagents,
+            agent_name=agent_name,
+            available_skills=set(agent_config.skills) if agent_config and agent_config.skills is not None else None,
         ),
         state_schema=ThreadState,
     )

@@ -18,6 +18,19 @@ class ViewedImageData(TypedDict):
     mime_type: str
 
 
+class PlanReviewTodo(TypedDict):
+    content: str
+    status: NotRequired[str]
+
+
+class PlanReviewState(TypedDict):
+    status: str
+    version: int
+    todos: list[PlanReviewTodo]
+    updated_at: int
+    title: NotRequired[str]
+
+
 def merge_artifacts(existing: list[str] | None, new: list[str] | None) -> list[str]:
     """Reducer for artifacts list - merges and deduplicates artifacts."""
     if existing is None:
@@ -51,5 +64,6 @@ class ThreadState(AgentState):
     title: NotRequired[str | None]
     artifacts: Annotated[list[str], merge_artifacts]
     todos: NotRequired[list | None]
+    plan_review: NotRequired[PlanReviewState | None]
     uploaded_files: NotRequired[list[dict] | None]
     viewed_images: Annotated[dict[str, ViewedImageData], merge_viewed_images]  # image_path -> {base64, mime_type}

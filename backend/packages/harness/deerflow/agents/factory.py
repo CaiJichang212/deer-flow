@@ -21,9 +21,10 @@ from langchain.agents.middleware import AgentMiddleware
 from deerflow.agents.features import RuntimeFeatures
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from deerflow.agents.middlewares.dangling_tool_call_middleware import DanglingToolCallMiddleware
+from deerflow.agents.middlewares.plan_review_middleware import PlanReviewMiddleware
 from deerflow.agents.middlewares.tool_error_handling_middleware import ToolErrorHandlingMiddleware
 from deerflow.agents.thread_state import ThreadState
-from deerflow.tools.builtins import ask_clarification_tool
+from deerflow.tools.builtins import ask_clarification_tool, review_plan_tool
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -161,7 +162,7 @@ def _assemble_from_features(
 ) -> tuple[list[AgentMiddleware], list[BaseTool]]:
     """Build an ordered middleware chain + extra tools from *feat*.
 
-    Middleware order matches ``make_lead_agent`` (14 middlewares):
+    Middleware order matches ``make_lead_agent`` (15 middlewares in plan mode):
 
       0-2. Sandbox infrastructure (ThreadData → Uploads → Sandbox)
       3.   DanglingToolCallMiddleware (always)
@@ -174,7 +175,8 @@ def _assemble_from_features(
       10.  ViewImageMiddleware (vision feature)
       11.  SubagentLimitMiddleware (subagent feature)
       12.  LoopDetectionMiddleware (always)
-      13.  ClarificationMiddleware (always last)
+      13.  PlanReviewMiddleware (plan_mode parameter)
+      14.  ClarificationMiddleware (always last)
 
     Two-phase ordering:
       1. Built-in chain — fixed sequential append.
@@ -227,6 +229,7 @@ def _assemble_from_features(
         from deerflow.agents.middlewares.todo_middleware import TodoMiddleware
 
         chain.append(TodoMiddleware(system_prompt=_TODO_SYSTEM_PROMPT, tool_description=_TODO_TOOL_DESCRIPTION))
+        extra_tools.append(review_plan_tool)
 
     # --- [8] Auto Title ---
     if feat.auto_title is not False:
@@ -275,7 +278,11 @@ def _assemble_from_features(
 
     chain.append(LoopDetectionMiddleware())
 
-    # --- [13] Clarification (always last among built-ins) ---
+    # --- [13] Plan review (plan_mode) ---
+    if plan_mode:
+        chain.append(PlanReviewMiddleware())
+
+    # --- [14] Clarification (always last among built-ins) ---
     chain.append(ClarificationMiddleware())
     extra_tools.append(ask_clarification_tool)
 
